@@ -1,0 +1,149 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build
+        run: go build ./...
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Test with coverage
+        run: |
+          set -o pipefail
+          go test -race -coverprofile=coverage.out ./... | tee coverage.txt
+
+      - name: Print coverage summary
+        run: go tool cover -func=coverage.out
+
+      - name: Check package coverage threshold
+        id: coverage-check
+        run: |
+          awk -v threshold=80 '
+            /coverage: [0-9.]+% of statements/ {
+              package_name = $2
+              for (i = 1; i <= NF; i++) {
+                if ($i == "coverage:") {
+                  coverage = $(i + 1)
+                  sub(/%/, "", coverage)
+                  if (coverage + 0 < threshold) {
+                    printf "| `%s` | %.1f%% |\n", package_name, coverage + 0
+                  }
+                }
+              }
+            }
+          ' coverage.txt > low-coverage.md
+
+          if [ -s low-coverage.md ]; then
+            {
+              echo "<!-- canopy-coverage-threshold-comment -->"
+              echo "Some packages are below 80% test coverage:"
+              echo
+              echo "| Package | Coverage |"
+              echo "| --- | ---: |"
+              cat low-coverage.md
+              echo
+              echo "Raise each listed package to at least 80% coverage to clear this comment."
+            } > coverage-pr-comment.md
+            echo "has_low_coverage=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_low_coverage=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Update package coverage PR comment
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/github-script@v7
+        env:
+          HAS_LOW_COVERAGE: ${{ steps.coverage-check.outputs.has_low_coverage }}
+        with:
+          script: |
+            const fs = require('fs');
+
+            const marker = '<!-- canopy-coverage-threshold-comment -->';
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner,
+              repo,
+              issue_number,
+              per_page: 100,
+            });
+            const existing = comments.find((comment) =>
+              comment.body && comment.body.includes(marker)
+            );
+
+            if (process.env.HAS_LOW_COVERAGE === 'true') {
+              const body = fs.readFileSync('coverage-pr-comment.md', 'utf8');
+
+              if (existing) {
+                await github.rest.issues.updateComment({
+                  owner,
+                  repo,
+                  comment_id: existing.id,
+                  body,
+                });
+              } else {
+                await github.rest.issues.createComment({
+                  owner,
+                  repo,
+                  issue_number,
+                  body,
+                });
+              }
+            } else if (existing) {
+              await github.rest.issues.deleteComment({
+                owner,
+                repo,
+                comment_id: existing.id,
+              });
+            }
+
+      - name: Generate coverage HTML
+        run: go tool cover -html=coverage.out -o coverage.html
+
+      - name: Upload coverage reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: |
+            coverage.out
+            coverage.html
+
+  prek:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v17
+
+      - name: Run pre-commit hooks
+        run: nix develop --command prek run --all-files
