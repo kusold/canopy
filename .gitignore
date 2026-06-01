@@ -1,0 +1,16 @@
+# Nix
+.direnv/
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+coverage.txt
+coverage.html
+coverage-pr-comment.md
+low-coverage.md
+go.work.sum

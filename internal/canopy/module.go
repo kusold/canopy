@@ -28,7 +28,9 @@ func (Module) Register(_ context.Context, app *grove.App) error {
 
 func helloHandler(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
+	if err := json.NewEncoder(w).Encode(map[string]string{
 		"message": "hello from canopy",
-	})
+	}); err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+	}
 }
