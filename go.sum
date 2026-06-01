@@ -1,2 +1,4 @@
 github.com/go-chi/chi/v5 v5.3.0 h1:halUjDxhshgXHMrao5bB8eNBXo/rnzwr8m5m36glehM=
 github.com/go-chi/chi/v5 v5.3.0/go.mod h1:R+tYY2hNuVUUjxoPtqUdgBqevM9s9njzkTLutVsOCto=
+github.com/kusold/grove v0.0.0-20260601042336-ef4c876a358c h1:kLS5estIC7yzTScJi2XheBi/kVvUgMNCWao/YWe01T0=
+github.com/kusold/grove v0.0.0-20260601042336-ef4c876a358c/go.mod h1:qNCoKcvx3qj4QlS3+WCxb07CVeyN7gOWPYfTY0Vsudo=

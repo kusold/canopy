@@ -23,6 +23,8 @@ jobs:
           go-version-file: go.mod
 
       - name: Build
+        env:
+          GOPRIVATE: github.com/kusold/*
         run: go build ./...
 
   test:
@@ -36,6 +38,8 @@ jobs:
           go-version-file: go.mod
 
       - name: Test with coverage
+        env:
+          GOPRIVATE: github.com/kusold/*
         run: |
           set -o pipefail
           go test -race -coverprofile=coverage.out ./... | tee coverage.txt
@@ -146,4 +150,6 @@ jobs:
         uses: DeterminateSystems/nix-installer-action@v17
 
       - name: Run pre-commit hooks
+        env:
+          GOPRIVATE: github.com/kusold/*
         run: nix develop --command prek run --all-files
