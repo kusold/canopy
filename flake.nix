@@ -28,6 +28,7 @@
               go
               golangci-lint
               gotools
+              just
               prek
             ];
           };
