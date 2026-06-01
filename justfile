@@ -1,5 +1,9 @@
 # Run the canopy server
 run:
+    go run .
+
+# Run the canopy server from the parent workspace
+work-run:
     cd .. && go run ./canopy
 
 # Run tests
@@ -25,5 +29,9 @@ check:
 
 # Tidy module dependencies
 tidy:
+    go mod tidy
+
+# Sync the parent workspace and tidy module dependencies
+work-tidy:
     cd .. && go work sync
     go mod tidy
