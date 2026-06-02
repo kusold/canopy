@@ -40,7 +40,9 @@ func TestMainGracefulShutdown(t *testing.T) {
 		if err != nil {
 			t.Fatalf("server not responding on %s: %v", addr, err)
 		}
-		_ = resp.Body.Close()
+		if err := resp.Body.Close(); err != nil {
+			t.Fatalf("close healthz response body: %v", err)
+		}
 		if resp.StatusCode != http.StatusOK {
 			t.Fatalf("healthz status = %d, want %d", resp.StatusCode, http.StatusOK)
 		}
@@ -78,7 +80,9 @@ func TestMainGracefulShutdown(t *testing.T) {
 		if err != nil {
 			t.Fatalf("server not responding on %s: %v", addr, err)
 		}
-		_ = resp.Body.Close()
+		if err := resp.Body.Close(); err != nil {
+			t.Fatalf("close healthz response body: %v", err)
+		}
 
 		p, _ := os.FindProcess(os.Getpid())
 		_ = p.Signal(syscall.SIGTERM)
@@ -100,7 +104,7 @@ func TestMainServerEndpoints(t *testing.T) {
 		runServer(t, addr)
 
 		resp := mustGet(t, "http://"+addr+"/healthz")
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 
 		if resp.StatusCode != http.StatusOK {
 			t.Fatalf("healthz status = %d, want %d", resp.StatusCode, http.StatusOK)
@@ -120,7 +124,7 @@ func TestMainServerEndpoints(t *testing.T) {
 		runServer(t, addr)
 
 		resp := mustGet(t, "http://"+addr+"/readyz")
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 
 		if resp.StatusCode != http.StatusOK {
 			t.Fatalf("readyz status = %d, want %d", resp.StatusCode, http.StatusOK)
@@ -140,7 +144,7 @@ func TestMainServerEndpoints(t *testing.T) {
 		runServer(t, addr)
 
 		resp := mustGet(t, "http://"+addr+"/example/hello")
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 
 		if resp.StatusCode != http.StatusOK {
 			t.Fatalf("/example/hello status = %d, want %d", resp.StatusCode, http.StatusOK)
@@ -174,7 +178,9 @@ func allocateAddr(t *testing.T) string {
 		t.Fatalf("allocate listener: %v", err)
 	}
 	addr := ln.Addr().String()
-	ln.Close()
+	if err := ln.Close(); err != nil {
+		t.Fatalf("close listener: %v", err)
+	}
 
 	t.Setenv("HTTP_ADDR", addr)
 	t.Setenv("HTTP_SHUTDOWN_TIMEOUT", "5s")
