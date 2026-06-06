@@ -9,6 +9,7 @@ import (
 
 	"github.com/kusold/grove"
 	"github.com/kusold/grove/apperr"
+	"github.com/kusold/grove/httpx"
 )
 
 // integrationTestApp creates a fully wired Grove App with the Canopy Module
@@ -171,6 +172,127 @@ func TestIntegration_WhoamiTenant(t *testing.T) {
 		}
 		if body["message"] != "hello from canopy" {
 			t.Errorf("message = %q, want %q", body["message"], "hello from canopy")
+		}
+	})
+
+	t.Run("returns 400 when only X-Tenant-ID header is present", func(t *testing.T) {
+		app := integrationTestApp(t, grove.WithTenancy())
+
+		req := httptest.NewRequest(http.MethodGet, "/example/whoami-tenant", nil)
+		req.Header.Set("X-Tenant-ID", "t1")
+		// X-Tenant-Slug is missing — HeaderResolver returns an error
+		rec := httptest.NewRecorder()
+		app.HTTP().ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+		}
+
+		var body apperr.ErrorResponse
+		if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+			t.Fatalf("decode error response: %v", err)
+		}
+		if body.Error.Code != "invalid_tenant" {
+			t.Errorf("code = %q, want %q", body.Error.Code, "invalid_tenant")
+		}
+	})
+
+	t.Run("returns 400 when only X-Tenant-Slug header is present", func(t *testing.T) {
+		app := integrationTestApp(t, grove.WithTenancy())
+
+		req := httptest.NewRequest(http.MethodGet, "/example/whoami-tenant", nil)
+		req.Header.Set("X-Tenant-Slug", "acme")
+		// X-Tenant-ID is missing — HeaderResolver returns an error
+		rec := httptest.NewRecorder()
+		app.HTTP().ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+		}
+
+		var body apperr.ErrorResponse
+		if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+			t.Fatalf("decode error response: %v", err)
+		}
+		if body.Error.Code != "invalid_tenant" {
+			t.Errorf("code = %q, want %q", body.Error.Code, "invalid_tenant")
+		}
+	})
+
+	t.Run("returns tenant_required when both headers are whitespace-only", func(t *testing.T) {
+		app := integrationTestApp(t, grove.WithTenancy())
+
+		req := httptest.NewRequest(http.MethodGet, "/example/whoami-tenant", nil)
+		req.Header.Set("X-Tenant-ID", "  ")
+		req.Header.Set("X-Tenant-Slug", "\t")
+		// Both whitespace-only: resolver returns (Tenant{}, false, nil),
+		// which means no tenant in context, so RequireMiddleware rejects.
+		rec := httptest.NewRecorder()
+		app.HTTP().ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnprocessableEntity)
+		}
+
+		var body apperr.ErrorResponse
+		if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+			t.Fatalf("decode error response: %v", err)
+		}
+		if body.Error.Code != "tenant_required" {
+			t.Errorf("code = %q, want %q", body.Error.Code, "tenant_required")
+		}
+	})
+
+	t.Run("tenant-required error response includes request_id when present", func(t *testing.T) {
+		app := integrationTestApp(t, grove.WithTenancy())
+
+		req := httptest.NewRequest(http.MethodGet, "/example/whoami-tenant", nil)
+		// Inject request ID into context to simulate request ID middleware
+		ctx := httpx.WithRequestID(req.Context(), "req-integration-001")
+		req = req.WithContext(ctx)
+		rec := httptest.NewRecorder()
+		app.HTTP().ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusUnprocessableEntity {
+			t.Fatalf("status = %d, want %d", rec.Code, http.StatusUnprocessableEntity)
+		}
+
+		var body apperr.ErrorResponse
+		if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+			t.Fatalf("decode error response: %v", err)
+		}
+		if body.Error.Code != "tenant_required" {
+			t.Errorf("code = %q, want %q", body.Error.Code, "tenant_required")
+		}
+		if body.Error.RequestID != "req-integration-001" {
+			t.Errorf("request_id = %q, want %q", body.Error.RequestID, "req-integration-001")
+		}
+	})
+
+	t.Run("invalid-tenant error response includes request_id when present", func(t *testing.T) {
+		app := integrationTestApp(t, grove.WithTenancy())
+
+		req := httptest.NewRequest(http.MethodGet, "/example/whoami-tenant", nil)
+		req.Header.Set("X-Tenant-ID", "t1")
+		// X-Tenant-Slug missing triggers resolver error
+		ctx := httpx.WithRequestID(req.Context(), "req-integration-002")
+		req = req.WithContext(ctx)
+		rec := httptest.NewRecorder()
+		app.HTTP().ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+		}
+
+		var body apperr.ErrorResponse
+		if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+			t.Fatalf("decode error response: %v", err)
+		}
+		if body.Error.Code != "invalid_tenant" {
+			t.Errorf("code = %q, want %q", body.Error.Code, "invalid_tenant")
+		}
+		if body.Error.RequestID != "req-integration-002" {
+			t.Errorf("request_id = %q, want %q", body.Error.RequestID, "req-integration-002")
 		}
 	})
 }
