@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/kusold/grove"
+	"github.com/kusold/grove/tenancy"
 )
 
 func TestModuleName(t *testing.T) {
@@ -81,6 +82,68 @@ func TestHelloHandler(t *testing.T) {
 
 		r := chi.NewRouter()
 		r.Get("/example/hello", helloHandler)
+		r.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusInternalServerError {
+			t.Fatalf("status = %d, want %d", rec.Code, http.StatusInternalServerError)
+		}
+	})
+}
+
+func TestWhoamiTenantHandler(t *testing.T) {
+	t.Run("returns tenant ID and slug from context", func(t *testing.T) {
+		tenant := tenancy.Tenant{ID: "00000000-0000-0000-0000-000000000001", Slug: "acme"}
+
+		req := httptest.NewRequest(http.MethodGet, "/example/whoami-tenant", nil)
+		req = req.WithContext(tenancy.WithTenant(req.Context(), tenant))
+		rec := httptest.NewRecorder()
+
+		r := chi.NewRouter()
+		r.Get("/example/whoami-tenant", whoamiTenantHandler)
+		r.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+		}
+
+		ct := rec.Header().Get("Content-Type")
+		if ct != "application/json" {
+			t.Errorf("Content-Type = %q, want %q", ct, "application/json")
+		}
+
+		var body map[string]string
+		if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+		if body["tenant_id"] != tenant.ID {
+			t.Errorf("tenant_id = %q, want %q", body["tenant_id"], tenant.ID)
+		}
+		if body["tenant_slug"] != tenant.Slug {
+			t.Errorf("tenant_slug = %q, want %q", body["tenant_slug"], tenant.Slug)
+		}
+	})
+
+	t.Run("returns 500 when no tenant in context", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/example/whoami-tenant", nil)
+		rec := httptest.NewRecorder()
+
+		r := chi.NewRouter()
+		r.Get("/example/whoami-tenant", whoamiTenantHandler)
+		r.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusInternalServerError {
+			t.Fatalf("status = %d, want %d", rec.Code, http.StatusInternalServerError)
+		}
+	})
+
+	t.Run("returns 500 when response write fails", func(t *testing.T) {
+		tenant := tenancy.Tenant{ID: "t1", Slug: "acme"}
+		req := httptest.NewRequest(http.MethodGet, "/example/whoami-tenant", nil)
+		req = req.WithContext(tenancy.WithTenant(req.Context(), tenant))
+		rec := &failingResponseWriter{ResponseRecorder: httptest.NewRecorder()}
+
+		r := chi.NewRouter()
+		r.Get("/example/whoami-tenant", whoamiTenantHandler)
 		r.ServeHTTP(rec, req)
 
 		if rec.Code != http.StatusInternalServerError {
