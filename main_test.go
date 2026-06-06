@@ -166,6 +166,59 @@ func TestMainServerEndpoints(t *testing.T) {
 	})
 }
 
+func TestMainServerTenantEndpoints(t *testing.T) {
+	t.Run("GET /example/whoami-tenant returns tenant info with headers", func(t *testing.T) {
+		addr := allocateAddr(t)
+		runServer(t, addr)
+
+		req, err := http.NewRequest(http.MethodGet, "http://"+addr+"/example/whoami-tenant", nil)
+		if err != nil {
+			t.Fatalf("create request: %v", err)
+		}
+		req.Header.Set("X-Tenant-ID", "00000000-0000-0000-0000-000000000001")
+		req.Header.Set("X-Tenant-Slug", "acme")
+
+		client := &http.Client{Timeout: 2 * time.Second}
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatalf("GET /example/whoami-tenant: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		if resp.StatusCode != http.StatusOK {
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			t.Fatalf("status = %d, want %d, body: %s", resp.StatusCode, http.StatusOK, bodyBytes)
+		}
+
+		var body map[string]string
+		if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+			t.Fatalf("decode response: %v", err)
+		}
+		if body["tenant_id"] != "00000000-0000-0000-0000-000000000001" {
+			t.Errorf("tenant_id = %q, want %q", body["tenant_id"], "00000000-0000-0000-0000-000000000001")
+		}
+		if body["tenant_slug"] != "acme" {
+			t.Errorf("tenant_slug = %q, want %q", body["tenant_slug"], "acme")
+		}
+	})
+
+	t.Run("GET /example/whoami-tenant returns 422 without tenant headers", func(t *testing.T) {
+		addr := allocateAddr(t)
+		runServer(t, addr)
+
+		client := &http.Client{Timeout: 2 * time.Second}
+		resp, err := client.Get("http://" + addr + "/example/whoami-tenant")
+		if err != nil {
+			t.Fatalf("GET /example/whoami-tenant: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		if resp.StatusCode != http.StatusUnprocessableEntity {
+			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusUnprocessableEntity)
+		}
+	})
+}
+
 // allocateAddr finds a free TCP port, sets HTTP_ADDR to it, and returns the
 // address string. The port is released before returning so the server can bind
 // to it.
@@ -195,7 +248,7 @@ func runServer(t *testing.T, addr string) {
 	ctx, cancel := context.WithCancel(context.Background())
 	runDone := make(chan error, 1)
 	go func() {
-		runDone <- grove.Run(ctx, canopy.Module{}, grove.WithHTTP())
+		runDone <- grove.Run(ctx, canopy.Module{}, grove.WithHTTP(), grove.WithTenancy())
 	}()
 
 	waitForHTTP(t, addr, "/healthz")

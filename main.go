@@ -9,5 +9,6 @@ func main() {
 	grove.Main(
 		canopy.Module{},
 		grove.WithHTTP(),
+		grove.WithTenancy(),
 	)
 }
