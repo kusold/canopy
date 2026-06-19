@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
@@ -138,6 +139,50 @@ func TestCanopyMigrations(t *testing.T) {
 			t.Fatal("no embedded migration files found; expected at least one")
 		}
 	})
+}
+
+// TestExampleWidgetsMigration guards the security-critical elements of the
+// tenant-scoped widgets migration. The full runtime RLS isolation behavior is
+// exercised by a separate Phase 3 issue; this test ensures the migration source
+// carries the table, forced row-level security, and a tenant isolation policy
+// that defers to grove.current_tenant_id(). It runs without a database so it
+// stays CI-safe and fails loudly if any of those guarantees are dropped.
+func TestExampleWidgetsMigration(t *testing.T) {
+	source := canopyMigrations()
+	matches, err := fs.Glob(source.FS, source.Dir+"/*example_widgets.sql")
+	if err != nil {
+		t.Fatalf("glob example_widgets migration: %v", err)
+	}
+	if len(matches) != 1 {
+		t.Fatalf("expected exactly 1 example_widgets migration, got %d: %v", len(matches), matches)
+	}
+
+	data, err := fs.ReadFile(source.FS, matches[0])
+	if err != nil {
+		t.Fatalf("read embedded example_widgets migration: %v", err)
+	}
+	sql := string(data)
+
+	// Each assertion maps to an acceptance criterion from kusold/grove#54.
+	for _, want := range []string{
+		"-- +goose Up",
+		"create table example_widgets",
+		"id uuid primary key",
+		"tenant_id uuid not null",
+		"name text not null",
+		"created_at timestamptz not null default now()",
+		"alter table example_widgets enable row level security",
+		"alter table example_widgets force row level security",
+		"create policy example_widgets_tenant_isolation on example_widgets",
+		"using (tenant_id = grove.current_tenant_id())",
+		"with check (tenant_id = grove.current_tenant_id())",
+		"-- +goose Down",
+		"drop table if exists example_widgets",
+	} {
+		if !strings.Contains(sql, want) {
+			t.Errorf("example_widgets migration missing %q", want)
+		}
+	}
 }
 
 func TestHelloHandler(t *testing.T) {
