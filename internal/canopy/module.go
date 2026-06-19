@@ -5,13 +5,32 @@ package canopy
 
 import (
 	"context"
+	"embed"
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/kusold/grove"
+	"github.com/kusold/grove/migrate"
 	"github.com/kusold/grove/tenancy"
 )
+
+// migrationFS holds the canopy service migrations. They are embedded so the
+// compiled binary carries its schema and Grove can apply it at startup.
+//
+//go:embed migrations/*.sql
+var migrationFS embed.FS
+
+// canopyMigrations returns the canopy service migration source registered with
+// Grove's migration registry.
+func canopyMigrations() migrate.Source {
+	return migrate.Source{
+		Name: "canopy",
+		FS:   migrationFS,
+		Dir:  "migrations",
+	}
+}
 
 // Module implements grove.Module for the Canopy service.
 type Module struct{}
@@ -32,6 +51,17 @@ func (Module) Register(_ context.Context, app *grove.App) error {
 			r.Get("/", whoamiTenantHandler)
 		})
 	})
+
+	// Register canopy migrations when the capability is enabled. Production
+	// wiring (main.go) always enables migrations, so this runs in every real
+	// deployment. The conditional keeps tests that exercise HTTP-only behavior
+	// from requiring a database.
+	if reg, err := app.RequireMigrations(); err == nil {
+		if err := reg.Register(canopyMigrations()); err != nil {
+			return fmt.Errorf("register canopy migrations: %w", err)
+		}
+	}
+
 	return nil
 }
 

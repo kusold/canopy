@@ -3,12 +3,14 @@ package canopy
 import (
 	"context"
 	"encoding/json"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/kusold/grove"
+	"github.com/kusold/grove/migrate"
 	"github.com/kusold/grove/tenancy"
 )
 
@@ -50,6 +52,90 @@ func TestModuleRegister(t *testing.T) {
 		}
 		if body["message"] != "hello from canopy" {
 			t.Errorf("message = %q, want %q", body["message"], "hello from canopy")
+		}
+	})
+
+	t.Run("skips migration registration when capability is not enabled", func(t *testing.T) {
+		// HTTP-only wiring must not require Postgres or migrations. This lets
+		// HTTP-focused tests run without a database.
+		app, err := grove.NewApp("canopy", grove.WithHTTP())
+		if err != nil {
+			t.Fatalf("NewApp() error: %v", err)
+		}
+
+		var m Module
+		if err := m.Register(context.Background(), app); err != nil {
+			t.Fatalf("Register() error: %v", err)
+		}
+
+		if _, err := app.RequireMigrations(); err == nil {
+			t.Fatal("RequireMigrations() unexpectedly succeeded without WithMigrations()")
+		}
+	})
+
+	t.Run("registers canopy migrations when capability is enabled", func(t *testing.T) {
+		app, err := grove.NewApp(
+			"canopy",
+			grove.WithHTTP(),
+			grove.WithPostgres(),
+			grove.WithMigrations(),
+		)
+		if err != nil {
+			t.Fatalf("NewApp() error: %v", err)
+		}
+
+		var m Module
+		if err := m.Register(context.Background(), app); err != nil {
+			t.Fatalf("Register() error: %v", err)
+		}
+
+		reg, err := app.RequireMigrations()
+		if err != nil {
+			t.Fatalf("RequireMigrations() error: %v", err)
+		}
+
+		sources := reg.Sources()
+		var canopySource *migrate.Source
+		for i := range sources {
+			if sources[i].Name == "canopy" {
+				canopySource = &sources[i]
+				break
+			}
+		}
+		if canopySource == nil {
+			t.Fatalf("canopy migration source not registered; sources = %+v", sources)
+		}
+		if canopySource.Dir != "migrations" {
+			t.Errorf("canopy source Dir = %q, want %q", canopySource.Dir, "migrations")
+		}
+		if canopySource.FS == nil {
+			t.Error("canopy source FS is nil")
+		}
+	})
+}
+
+func TestCanopyMigrations(t *testing.T) {
+	t.Run("returns a source named canopy rooted at migrations", func(t *testing.T) {
+		source := canopyMigrations()
+		if source.Name != "canopy" {
+			t.Errorf("Name = %q, want %q", source.Name, "canopy")
+		}
+		if source.Dir != "migrations" {
+			t.Errorf("Dir = %q, want %q", source.Dir, "migrations")
+		}
+		if source.FS == nil {
+			t.Fatal("FS is nil; embed directive likely did not match any files")
+		}
+	})
+
+	t.Run("embeds at least one SQL migration file", func(t *testing.T) {
+		source := canopyMigrations()
+		matches, err := fs.Glob(source.FS, source.Dir+"/*.sql")
+		if err != nil {
+			t.Fatalf("glob embedded migrations: %v", err)
+		}
+		if len(matches) == 0 {
+			t.Fatal("no embedded migration files found; expected at least one")
 		}
 	})
 }

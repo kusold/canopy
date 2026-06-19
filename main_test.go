@@ -20,6 +20,65 @@ func TestMainBuilds(t *testing.T) {
 	// compiled successfully.
 }
 
+func TestOptions(t *testing.T) {
+	t.Run("returns options that build a valid app", func(t *testing.T) {
+		opts := options()
+		if len(opts) == 0 {
+			t.Fatal("options() returned no options")
+		}
+
+		// Apply the options the same way main() does. NewApp validates
+		// capability dependencies, so a missing prerequisite (e.g.
+		// WithMigrations without WithPostgres) fails here rather than at
+		// runtime.
+		if _, err := grove.NewApp("canopy", opts...); err != nil {
+			t.Fatalf("NewApp() with options() error: %v", err)
+		}
+	})
+
+	t.Run("enables postgres and migrations capabilities", func(t *testing.T) {
+		app, err := grove.NewApp("canopy", options()...)
+		if err != nil {
+			t.Fatalf("NewApp() error: %v", err)
+		}
+
+		if _, err := app.RequireDB(); err != nil {
+			t.Errorf("RequireDB() error: %v", err)
+		}
+		if _, err := app.RequireMigrations(); err != nil {
+			t.Errorf("RequireMigrations() error: %v", err)
+		}
+	})
+
+	t.Run("registers canopy migrations during module registration", func(t *testing.T) {
+		app, err := grove.NewApp("canopy", options()...)
+		if err != nil {
+			t.Fatalf("NewApp() error: %v", err)
+		}
+
+		if err := (canopy.Module{}).Register(context.Background(), app); err != nil {
+			t.Fatalf("Register() error: %v", err)
+		}
+
+		reg, err := app.RequireMigrations()
+		if err != nil {
+			t.Fatalf("RequireMigrations() error: %v", err)
+		}
+
+		sources := reg.Sources()
+		var hasCanopy bool
+		for _, s := range sources {
+			if s.Name == "canopy" {
+				hasCanopy = true
+				break
+			}
+		}
+		if !hasCanopy {
+			t.Errorf("canopy migration source not registered; sources = %+v", sources)
+		}
+	})
+}
+
 func TestMainGracefulShutdown(t *testing.T) {
 	t.Run("SIGINT triggers graceful shutdown", func(t *testing.T) {
 		addr := allocateAddr(t)
