@@ -1,6 +1,11 @@
 # Nix
 .direnv/
 
+# Local environment
+.env
+.env.*
+!.env.example
+
 # Go
 *.exe
 *.exe~
