@@ -7,7 +7,7 @@
 -- runner. It deliberately avoids creating tenant-scoped tables; those land in
 -- later Phase 3 issues. The version function gives operators and tests a
 -- lightweight way to confirm canopy migrations have been applied.
-create or replace function canopy_schema_version() returns text
+create or replace function public.canopy_schema_version() returns text
     language sql
     stable
     as $$
@@ -17,5 +17,5 @@ create or replace function canopy_schema_version() returns text
 
 -- +goose Down
 -- +goose StatementBegin
-drop function if exists canopy_schema_version();
+drop function if exists public.canopy_schema_version();
 -- +goose StatementEnd
