@@ -166,18 +166,18 @@ func TestExampleWidgetsMigration(t *testing.T) {
 	// Each assertion maps to an acceptance criterion from kusold/grove#54.
 	for _, want := range []string{
 		"-- +goose Up",
-		"create table public.example_widgets",
+		"create table example_widgets",
 		"id uuid primary key",
 		"tenant_id uuid not null",
 		"name text not null",
 		"created_at timestamptz not null default now()",
-		"alter table public.example_widgets enable row level security",
-		"alter table public.example_widgets force row level security",
-		"create policy example_widgets_tenant_isolation on public.example_widgets",
+		"alter table example_widgets enable row level security",
+		"alter table example_widgets force row level security",
+		"create policy example_widgets_tenant_isolation on example_widgets",
 		"using (tenant_id = grove.current_tenant_id())",
 		"with check (tenant_id = grove.current_tenant_id())",
 		"-- +goose Down",
-		"drop table if exists public.example_widgets",
+		"drop table if exists example_widgets",
 	} {
 		if !strings.Contains(sql, want) {
 			t.Errorf("example_widgets migration missing %q", want)
