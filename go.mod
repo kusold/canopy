@@ -4,7 +4,7 @@ go 1.25.8
 
 require (
 	github.com/go-chi/chi/v5 v5.3.0
-	github.com/kusold/grove v0.0.0-20260619035510-88f7e7276334
+	github.com/kusold/grove v0.0.0-20260620043033-2aa79b089650
 )
 
 require (
