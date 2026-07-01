@@ -37,6 +37,9 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Verify Docker is available
+        run: docker version
+
       - name: Test with coverage
         env:
           GOPRIVATE: github.com/kusold/*

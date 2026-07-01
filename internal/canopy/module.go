@@ -50,6 +50,23 @@ func (Module) Register(_ context.Context, app *grove.App) error {
 			r.Use(tenancy.RequireMiddleware())
 			r.Get("/", whoamiTenantHandler)
 		})
+
+		// Tenant-scoped widget CRUD. The routes are registered only when the
+		// Postgres capability is enabled, so HTTP-only wiring (and the tests
+		// that exercise it) do not require a database. In production
+		// (main.go) both Postgres and Tenancy are enabled, so the routes are
+		// available and guarded by tenant-required middleware. All persistence
+		// goes through db.TenantTx via pgxWidgetStore, so row-level security
+		// enforces tenant isolation at the database boundary.
+		if database, err := app.RequireDB(); err == nil {
+			widgets := &widgetAPI{store: &pgxWidgetStore{db: database}}
+			r.Route("/widgets", func(r chi.Router) {
+				r.Use(tenancy.RequireMiddleware())
+				r.Post("/", widgets.create)
+				r.Get("/", widgets.list)
+				r.Get("/{id}", widgets.get)
+			})
+		}
 	})
 
 	// Register canopy migrations when the capability is enabled. Production
