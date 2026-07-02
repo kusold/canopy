@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/kusold/grove/db"
 	"github.com/kusold/grove/migrate"
 	"github.com/kusold/grove/tenancy"
@@ -33,7 +34,8 @@ const (
 
 	// rlsAdminSeededID is a widget inserted directly by SystemTx (bypassing RLS
 	// through the admin pool) to demonstrate the intentional escape hatch.
-	rlsAdminSeededID = "cccccccc-cccc-cccc-cccc-cccccccccccc"
+	rlsAdminSeededID   = "cccccccc-cccc-cccc-cccc-cccccccccccc"
+	rlsBlockedInsertID = "dddddddd-dddd-dddd-dddd-dddddddddddd"
 )
 
 // setupRLSDB starts Postgres, creates a non-superuser role that is subject to
@@ -267,9 +269,13 @@ func TestWidgetRLSIsolation(t *testing.T) {
 		_, err := appDB.Pool().Exec(context.Background(),
 			`insert into public.example_widgets (id, tenant_id, name)
 			 values ($1, $2, $3)`,
-			widgetA.ID, rlsTenantAID, "should be blocked")
+			rlsBlockedInsertID, rlsTenantAID, "should be blocked")
 		if err == nil {
 			t.Fatal("insert without tenant setting should fail under RLS, got nil error")
+		}
+		var pgErr *pgconn.PgError
+		if !errors.As(err, &pgErr) || pgErr.Code != "42501" {
+			t.Fatalf("insert without tenant setting error = %v, want RLS policy violation", err)
 		}
 	})
 
