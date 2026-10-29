@@ -3,7 +3,7 @@ module github.com/kusold/canopy
 go 1.25.8
 
 require (
-	github.com/go-chi/chi/v5 v5.3.0
+	github.com/go-chi/chi/v5 v5.4.0
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/kusold/grove v0.0.0-20260620043033-2aa79b089650
